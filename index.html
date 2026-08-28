@@ -1,0 +1,470 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="theme-color" content="#7f5af0">
+  <meta name="description" content="Memoria Mágica: juego de memoria con emojis para niños. Empareja las cartas, niveles, cronómetro y puntos. Sin dependencias, gratis.">
+  <title>Memoria Mágica 🧠 — Juego de Memoria para Niños</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%A7%A0%3C/text%3E%3C/svg%3E">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    html, body { height: 100%; }
+    body {
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      background: linear-gradient(180deg, #8ec5ff 0%, #7f5af0 52%, #5a3dc8 100%);
+      display: flex;
+      justify-content: center;
+      min-height: 100vh;
+      overflow: hidden;
+      touch-action: manipulation;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+    .page {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      width: 100%;
+      max-width: 460px;
+      min-height: 100vh;
+      padding: 10px;
+      gap: 8px;
+    }
+    .hud {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      width: 100%;
+      background: rgba(255,255,255,0.95);
+      border-radius: 16px;
+      padding: 6px 8px;
+      box-shadow: 0 4px 14px rgba(0,0,0,0.18);
+      flex-shrink: 0;
+    }
+    .hud-block { display: flex; flex-direction: column; align-items: center; flex: 1; min-width: 0; }
+    .hud-label { font-size: 0.6rem; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: #6b7b8c; }
+    .hud-value { font-weight: 800; color: #1d3557; font-size: 1.0rem; line-height: 1.15; white-space: nowrap; }
+    #pairs-left { font-size: 0.85rem; }
+    #timer { color: #7f5af0; font-variant-numeric: tabular-nums; }
+    .hud-btns { display: flex; gap: 6px; }
+    .btn-icon {
+      border: none; background: #eef0fa; border-radius: 10px; width: 38px; height: 38px;
+      font-size: 1.05rem; cursor: pointer; transition: transform 0.12s ease, background 0.12s ease;
+    }
+    .btn-icon:active { transform: scale(0.92); background: #dde0f0; }
+    #game-wrap {
+      position: relative; width: 100%; max-width: 420px; aspect-ratio: 420 / 650;
+      border-radius: 20px; overflow: hidden; box-shadow: 0 12px 34px rgba(0,0,0,0.30);
+      background: linear-gradient(160deg, #8ec5ff 0%, #7f5af0 60%, #6a45d8 100%);
+      flex-shrink: 0; display: flex; flex-direction: column; padding: 10px;
+    }
+    .board {
+      flex: 1; display: grid; gap: 8px; align-content: center;
+      grid-template-columns: repeat(4, 1fr);
+      grid-auto-rows: 1fr;
+      perspective: 700px;
+    }
+    .card {
+      position: relative; aspect-ratio: 1 / 1; cursor: pointer; border: none;
+      transform-style: preserve-3d; transition: transform 0.35s cubic-bezier(0.4,0.2,0.2,1);
+      border-radius: 12px;
+    }
+    .card .face {
+      position: absolute; inset: 0; border-radius: 12px; display: flex; align-items: center;
+      justify-content: center; backface-visibility: hidden; -webkit-backface-visibility: hidden;
+      font-size: 2.2rem; box-shadow: 0 4px 10px rgba(0,0,0,0.18);
+    }
+    .card .back {
+      background: linear-gradient(160deg, #ffb347 0%, #ff6b6b 100%);
+      transform: rotateY(0deg);
+    }
+    .card .back::after { content: "❓"; font-size: 1.6rem; }
+    .card .front {
+      background: #ffffff; transform: rotateY(180deg);
+      font-family: 'Segoe UI Emoji','Apple Color Emoji','Noto Color Emoji',sans-serif;
+    }
+    .card.flipped, .card.matched { transform: rotateY(180deg); }
+    .card.matched { animation: pop 0.4s ease; }
+    .card.matched .front { background: linear-gradient(160deg, #b8f2c9 0%, #7ce0a0 100%); }
+    @keyframes pop { 0% { transform: rotateY(180deg) scale(1);} 50% { transform: rotateY(180deg) scale(1.15);} 100% { transform: rotateY(180deg) scale(1);} }
+    @keyframes shake { 0%,100%{ transform: translateX(0);} 25%{ transform: translateX(-6px);} 75%{ transform: translateX(6px);} }
+    .card.wrong { animation: shake 0.3s ease; }
+
+    .overlay {
+      position: absolute; inset: 0; z-index: 2; display: flex; flex-direction: column;
+      align-items: center; justify-content: center; gap: 12px; padding: 18px; text-align: center;
+      color: #fff; background: rgba(32,18,70,0.78); backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px);
+    }
+    .overlay.hidden { display: none; }
+    .overlay h1 { font-size: 1.8rem; text-shadow: 0 3px 0 rgba(0,0,0,0.25); }
+    .overlay h2 { font-size: 1.5rem; text-shadow: 0 3px 0 rgba(0,0,0,0.25); }
+    .tagline { font-size: 0.95rem; font-weight: 600; line-height: 1.4; }
+    .rules { list-style: none; background: rgba(255,255,255,0.12); border-radius: 14px; padding: 10px 16px; font-size: 0.85rem; line-height: 1.7; text-align: left; }
+    .final-score { font-size: 1.1rem; font-weight: 700; background: rgba(255,255,255,0.14); border-radius: 12px; padding: 10px 18px; }
+    .best { font-size: 0.82rem; font-weight: 600; color: #ffe66d; min-height: 1em; }
+    .btn-play {
+      border: none; cursor: pointer; font-family: inherit; font-size: 1.15rem; font-weight: 800; color: #fff;
+      background: linear-gradient(180deg, #ff9f43 0%, #ee5a24 100%);
+      padding: 14px 34px; border-radius: 999px; box-shadow: 0 6px 0 #b83b0b, 0 10px 18px rgba(0,0,0,0.25);
+      transition: transform 0.1s ease, box-shadow 0.1s ease;
+    }
+    .btn-play:active { transform: translateY(5px); box-shadow: 0 1px 0 #b83b0b, 0 4px 10px rgba(0,0,0,0.25); }
+    .btn-play.btn-ghost { background: rgba(255,255,255,0.16); box-shadow: 0 4px 0 rgba(0,0,0,0.25), 0 8px 14px rgba(0,0,0,0.2); font-size: 0.95rem; padding: 11px 24px; }
+
+    .footer { width: 100%; display: flex; flex-direction: column; align-items: center; gap: 6px; flex-shrink: 0; }
+    .ad-slot {
+      width: 100%; max-width: 420px; min-height: 64px; display: flex; flex-direction: column;
+      align-items: center; justify-content: center; gap: 2px; background: rgba(255,255,255,0.9);
+      border: 2px dashed #c7b8e8; border-radius: 12px; font-size: 0.82rem; color: #6b5e95;
+    }
+    .ad-placeholder { font-weight: 800; letter-spacing: 2px; }
+    .ad-badge { font-size: 0.68rem; font-weight: 800; color: #e63946; background: #ffe6e9; padding: 1px 8px; border-radius: 999px; font-family: monospace; }
+    .credits { font-size: 0.72rem; color: rgba(255,255,255,0.85); font-weight: 600; }
+    @media (max-width: 360px) {
+      .overlay h1 { font-size: 1.5rem; }
+      .rules { font-size: 0.78rem; }
+      .card .face { font-size: 1.8rem; }
+      .card .back::after { font-size: 1.3rem; }
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+
+    <header class="hud">
+      <div class="hud-block">
+        <span class="hud-label">Nivel</span>
+        <span class="hud-value" id="level">1</span>
+      </div>
+      <div class="hud-block">
+        <span class="hud-label">Puntos</span>
+        <span class="hud-value" id="score">0</span>
+      </div>
+      <div class="hud-block">
+        <span class="hud-label">Pares</span>
+        <span class="hud-value" id="pairs-left">6/6</span>
+      </div>
+      <div class="hud-block">
+        <span class="hud-label">Tiempo</span>
+        <span class="hud-value" id="timer">00:00</span>
+      </div>
+      <div class="hud-btns">
+        <button class="btn-icon" id="btn-sound" aria-label="Activar o silenciar sonido">🔊</button>
+      </div>
+    </header>
+
+    <main id="game-wrap">
+      <div class="board" id="board"></div>
+
+      <div class="overlay" id="screen-start">
+        <h1>🧠 Memoria Mágica</h1>
+        <p class="tagline">¡Da la vuelta a las cartas y encuentra las parejas de emojis!</p>
+        <ul class="rules">
+          <li>🔎 Toca las cartas para girarlas</li>
+          <li>🎯 Encuentra todas las parejas de emojis</li>
+          <li>⭐ Menos intentos y menos tiempo = ¡más puntos!</li>
+          <li>🏆 Mentiras recordadas: +50 si no fallas (nivel 1)</li>
+        </ul>
+        <button class="btn-play" id="btn-start">▶ ¡Jugar!</button>
+        <p class="best" id="best-start"></p>
+      </div>
+
+      <div class="overlay hidden" id="screen-level">
+        <h2 id="level-title">⭐ ¡Nivel 2! ⭐</h2>
+        <p class="tagline" id="level-desc">Más cartas, ¡más difícil!</p>
+        <button class="btn-play" id="btn-next">▶ ¡Continuar!</button>
+      </div>
+
+      <div class="overlay hidden" id="screen-over">
+        <h2>🏆 ¡Victoria!</h2>
+        <p class="final-score" id="final-score"></p>
+        <p class="best" id="best-over"></p>
+        <p class="tagline" id="end-tagline">¡Eres una máquina de la memoria!</p>
+        <button class="btn-play" id="btn-restart">🔄 Jugar de nuevo</button>
+        <button class="btn-play btn-ghost" id="btn-over-home">🏠 Menú</button>
+      </div>
+
+      <div class="overlay hidden" id="screen-wait"></div>
+    </main>
+
+    <footer class="footer">
+      <!-- ============================================================ -->
+      <!-- TODO_ADSENSE_AQUI: espacio de publicidad (footer) -->
+      <!-- 1) Reemplaza ca-pub-XXXX por tu Google Publisher ID y descomenta: -->
+      <!--
+      <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-XXXX"
+           crossorigin="anonymous"></script>
+      -->
+      <!-- 2) Sustituye el contenido de #ad-slot por tu anuncio, por ejemplo: -->
+      <!--
+      <ins class="adsbygoogle"
+           style="display:block"
+           data-ad-client="ca-pub-XXXX"
+           data-ad-slot="1234567890"
+           data-ad-format="auto"
+           data-full-width-responsive="true"></ins>
+      <script> (adsbygoogle = window.adsbygoogle || []).push({}); </script>
+      -->
+      <!-- ============================================================ -->
+      <div class="ad-slot" id="ad-slot">
+        <span class="ad-placeholder">PUBLICIDAD · AD SPACE</span>
+        <span class="ad-badge" id="ad-tag">TODO_ADSENSE_AQUI</span>
+      </div>
+      <p class="credits">Memoria Mágica © 2026 · HTML5 puro, sin dependencias · Listo para GitHub Pages</p>
+    </footer>
+
+  </div>
+
+  <script>
+  "use strict";
+
+  const levelConfigs = [
+    { pairs: 6, cols: 4 },   // nivel 1
+    { pairs: 10, cols: 4 },  // nivel 2
+    { pairs: 15, cols: 5 },  // nivel 3
+    { pairs: 21, cols: 6 }   // nivel 4 (final)
+  ];
+
+  const EMOJIS = ["🚀","🌈","🦄","🍕","⚽","🎈","🌸","🚗","🐸","⚡","🎵","🌙","🍦","🐼","🦖","⭐","🍓","🐙","🎉","🔥","🧸","🍩"];
+
+  const board = document.getElementById("board");
+  const elLevel = document.getElementById("level");
+  const elScore = document.getElementById("score");
+  const elPairs = document.getElementById("pairs-left");
+  const elTimer = document.getElementById("timer");
+  const elBestStart = document.getElementById("best-start");
+  const elBestOver = document.getElementById("best-over");
+  const elFinalScore = document.getElementById("final-score");
+  const screenStart = document.getElementById("screen-start");
+  const screenLevel = document.getElementById("screen-level");
+  const screenOver = document.getElementById("screen-over");
+
+  let best = (function(){ try { return parseInt(localStorage.getItem("mm-best")||"0",10)||0; } catch(e){ return 0; }})();
+  function saveBest(){ try { localStorage.setItem("mm-best", String(best)); } catch(e){} }
+
+  const Sound = {
+    ctx: null,
+    muted: (function(){ try { return localStorage.getItem("mm-muted")==="1"; } catch(e){ return false; } })(),
+    ensure(){ if(!this.ctx){ const AC = window.AudioContext||window.webkitAudioContext; if(AC) this.ctx=new AC(); } if(this.ctx&&this.ctx.state==="suspended") this.ctx.resume(); },
+    tone(freq,dur,type,vol,delay){ if(this.muted||!this.ctx) return; const t=this.ctx.currentTime+(delay||0); const o=this.ctx.createOscillator(); const g=this.ctx.createGain(); o.type=type||"sine"; o.frequency.setValueAtTime(freq,t); g.gain.setValueAtTime(vol||0.2,t); g.gain.exponentialRampToValueAtTime(0.0001,t+dur); o.connect(g); g.connect(this.ctx.destination); o.start(t); o.stop(t+dur); },
+    flip(){ this.tone(440,0.06,"triangle",0.15); },
+    match(){ this.tone(523,0.09,"square",0.16); this.tone(784,0.12,"square",0.16,0.08); },
+    win(){ [523,659,784,1046].forEach((f,i)=>this.tone(f,0.16,"triangle",0.22,i*0.09)); },
+    wrong(){ this.tone(180,0.16,"sawtooth",0.15); },
+    tick(){ this.tone(880,0.03,"square",0.06); },
+    levelUp(){ [392,523,659,784].forEach((f,i)=>this.tone(f,0.15,"triangle",0.2,i*0.09)); },
+    toggle(){ this.muted=!this.muted; try{ localStorage.setItem("mm-muted",this.muted?"1":"0"); }catch(e){} return this.muted; }
+  };
+
+  let state = "start";
+  let levelIdx = 0;
+  let score = 0;
+  let cards = [];
+  let flipped = [];
+  let locked = false;
+  let mismatches = 0;
+  let timerCount = 0;
+  let timerInterval = null;
+  const MAX_TIME = 180;
+
+  function shuffle(a){ for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; } return a; }
+
+  function buildDeck(){
+    const cfg = levelConfigs[levelIdx];
+    const chosen = shuffle(EMOJIS.slice()).slice(0, cfg.pairs);
+    const deck = shuffle([...chosen, ...chosen].map((emoji, idx) => ({ id: idx, emoji })));
+    cards = deck;
+    board.style.gridTemplateColumns = "repeat(" + cfg.cols + ", 1fr)";
+    board.innerHTML = "";
+    cards.forEach((c, i) => {
+      const card = document.createElement("button");
+      card.className = "card";
+      card.dataset.index = i;
+      card.innerHTML = '<div class="face front">' + c.emoji + '</div><div class="face back"></div>';
+      card.addEventListener("click", () => flipCard(i));
+      board.appendChild(card);
+    });
+    updatePairs();
+    mismatches = 0;
+  }
+
+  function updatePairs(){
+    const matched = cards.filter(c => c.matched).length / 2;
+    const cfg = levelConfigs[levelIdx];
+    elPairs.textContent = matched + "/" + cfg.pairs;
+    return matched;
+  }
+
+  function flipCard(i){
+    if(state!=="playing" || locked) return;
+    const c = cards[i];
+    if(c.matched || c.flipped) return;
+    Sound.ensure();
+    Sound.flip();
+    c.flipped = true;
+    renderCard(i, true);
+    flipped.push(i);
+    if(flipped.length === 2){
+      locked = true;
+      const [a,b] = flipped;
+      if(cards[a].emoji === cards[b].emoji){ matchPair(a,b); }
+      else { wrongPair(a,b); }
+    }
+  }
+
+  function renderCard(i, flippedState){
+    const el = board.children[i];
+    if(flippedState) el.classList.add("flipped");
+    else el.classList.remove("flipped");
+  }
+
+  function matchPair(a,b){
+    const cfg = levelConfigs[levelIdx];
+    cards[a].matched = cards[b].matched = true;
+    renderCard(a, true);
+    renderCard(b, true);
+    board.children[a].classList.add("matched");
+    board.children[b].classList.add("matched");
+    const bonus = mismatches === 0 && levelIdx === 0 ? 50 : 0;
+    const gained = (mismatches === 0 ? 150 : 80) + bonus;
+    score += gained;
+    elScore.textContent = score;
+    Sound.match();
+    setTimeout(() => { Sound.win(); }, 180);
+    flipped = [];
+    locked = false;
+    if(updatePairs() === cfg.pairs){ completeLevel(cfg); }
+  }
+
+  function wrongPair(a,b){
+    mismatches++;
+    board.children[a].classList.add("wrong");
+    board.children[b].classList.add("wrong");
+    Sound.wrong();
+    setTimeout(() => {
+      cards[a].flipped = cards[b].flipped = false;
+      board.children[a].classList.remove("flipped","wrong");
+      board.children[b].classList.remove("flipped","wrong");
+      flipped = [];
+      locked = false;
+    }, 650);
+  }
+
+  function completeLevel(cfg){
+    clearInterval(timerInterval);
+    if(levelIdx < levelConfigs.length - 1){
+      state = "level";
+      elPairs.textContent = cfg.pairs + "/" + cfg.pairs;
+      setTimeout(() => {
+        Sound.levelUp();
+        document.getElementById("level-title").textContent = "⭐ ¡Nivel " + (levelIdx + 2) + "! ⭐";
+        document.getElementById("level-desc").textContent = "¡Ahora con " + levelConfigs[levelIdx+1].pairs + " pares!";
+        screenLevel.classList.remove("hidden");
+      }, 500);
+    } else {
+      finishGame();
+    }
+  }
+
+  function finishGame(){
+    state = "gameover";
+    if(score > best){ best = score; saveBest(); }
+    elFinalScore.textContent = "Puntuación final: " + score;
+    elBestOver.textContent = score >= best && score > 0 ? "🏆 ¡Nuevo récord! " + best : "Récord: " + best;
+    document.getElementById("end-tagline").textContent = mismatches === 0 ? "🎯 ¡Sin fallos! ¡Impresionante!" : "¡Eres una máquina de la memoria!";
+    screenOver.classList.remove("hidden");
+  }
+
+  function formatTime(s){
+    const m = Math.floor(s/60), sec = s%60;
+    return (m<10?"0":"")+m+":"+(sec<10?"0":"")+sec;
+  }
+
+  function startTimer(){
+    timerCount = 0;
+    elTimer.textContent = formatTime(0);
+    clearInterval(timerInterval);
+    timerInterval = setInterval(() => {
+      timerCount++;
+      elTimer.textContent = formatTime(timerCount);
+      if(timerCount % 10 === 0) Sound.tick();
+      if(timerCount >= MAX_TIME){ clearInterval(timerInterval); finishGame(); }
+    }, 1000);
+  }
+
+  function startGame(){
+    Sound.ensure();
+    flushWait();
+    levelIdx = 0;
+    score = 0;
+    elScore.textContent = 0;
+    elLevel.textContent = "1";
+    screenStart.classList.add("hidden");
+    screenOver.classList.add("hidden");
+    screenLevel.classList.add("hidden");
+    buildDeck();
+    revealAll();
+    state = "playing";
+  }
+
+  function revealAll(){
+    state = "memorizing";
+    showWait("👀 ¡Memoriza!");
+    cards.forEach((_, i) => { cards[i].revealed = true; board.children[i].classList.add("flipped"); });
+    setTimeout(() => {
+      cards.forEach((_, i) => { if(!cards[i].matched) { cards[i].revealed = false; board.children[i].classList.remove("flipped"); } });
+      hideWait();
+      state = "playing";
+      startTimer();
+    }, 900);
+  }
+
+  function nextLevel(){
+    Sound.ensure();
+    flushWait();
+    levelIdx++;
+    elLevel.textContent = levelIdx + 1;
+    screenLevel.classList.add("hidden");
+    buildDeck();
+    revealAll();
+    state = "playing";
+  }
+
+  function showWait(msg){
+    const w = document.getElementById("screen-wait");
+    w.textContent = msg;
+    w.classList.remove("hidden");
+  }
+  function hideWait(){
+    document.getElementById("screen-wait").classList.add("hidden");
+  }
+  function flushWait(){ hideWait(); }
+
+  function toMenu(){
+    clearInterval(timerInterval);
+    state = "start";
+    screenStart.classList.remove("hidden");
+    screenOver.classList.add("hidden");
+    screenLevel.classList.add("hidden");
+    hideWait();
+    elBestStart.textContent = best > 0 ? "🏆 Récord: " + best : "";
+  }
+
+  document.getElementById("btn-start").addEventListener("click", startGame);
+  document.getElementById("btn-restart").addEventListener("click", startGame);
+  document.getElementById("btn-next").addEventListener("click", nextLevel);
+  document.getElementById("btn-over-home").addEventListener("click", toMenu);
+  document.addEventListener("visibilitychange", () => {
+    if(document.hidden && state === "playing"){ showWait("⏸️ Pausa"); clearInterval(timerInterval); }
+  });
+
+  const btnSound = document.getElementById("btn-sound");
+  function paintSoundBtn(){ btnSound.textContent = Sound.muted ? "🔇" : "🔊"; }
+  btnSound.addEventListener("click", () => { Sound.ensure(); Sound.toggle(); paintSoundBtn(); });
+  paintSoundBtn();
+
+  elBestStart.textContent = best > 0 ? "🏆 Récord: " + best : "";
+  </script>
+</body>
+</html>
