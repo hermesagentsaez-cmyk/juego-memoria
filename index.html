@@ -128,8 +128,7 @@
       .card .back::after { font-size: 1.3rem; }
     }
   </style>
-    <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-8394580566528663"></script>
-  </head>
+</head>
 <body>
   <div class="page">
 
@@ -467,5 +466,119 @@
 
   elBestStart.textContent = best > 0 ? "🏆 Récord: " + best : "";
   </script>
+
+<script>
+// ===== WIDGET VIP COMÚN (juegos Mauro) =====
+// Inyectado en cada juego. Conecta con el worker de pagos
+// (pagos-mauro.maurojuegos.workers.dev) y activa VIP por localStorage.
+(function () {
+  if (window.__vipWidgetLoaded) return;
+  window.__vipWidgetLoaded = true;
+
+  var STORAGE_KEY = "jm-vip-" + (window.location.pathname.split("/").filter(Boolean).pop() || "juego");
+  var PAYMENT_URL = "https://pagos-mauro.maurojuegos.workers.dev";
+  var isVip = false;
+  try { isVip = localStorage.getItem(STORAGE_KEY) === "1"; } catch (e) {}
+
+  // --- Estilos ---
+  var css = ".__vip-fab{position:fixed;bottom:16px;right:16px;z-index:99998;background:linear-gradient(135deg,#f6d365,#fda085);color:#5a3dc8;border:none;border-radius:50px;padding:12px 20px;font:800 15px/1 system-ui;box-shadow:0 6px 20px rgba(0,0,0,.35);cursor:pointer;display:flex;align-items:center;gap:8px;transition:transform .2s}.__vip-fab:hover{transform:scale(1.08)}.__vip-fab.vip-on{background:linear-gradient(135deg,#a8e063,#56ab2f);color:#fff}";
+  css += ".__vip-modal{position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,.55);display:none;align-items:center;justify-content:center;padding:16px}.__vip-modal.open{display:flex}";
+  css += ".__vip-card{background:#fff;border-radius:20px;max-width:380px;width:100%;padding:24px;text-align:center;font:400 15px/1.5 system-ui;color:#1d3557;box-shadow:0 20px 60px rgba(0,0,0,.4);max-height:90vh;overflow-y:auto;position:relative}";
+  css += ".__vip-card h3{margin:0 0 6px;font-size:24px;color:#5a3dc8}";
+  css += ".__vip-card .price{font-size:28px;font-weight:800;color:#e07b00;margin:8px 0}";
+  css += ".__vip-card ul{text-align:left;padding-left:20px;margin:12px 0}";
+  css += ".__vip-card li{margin:5px 0}";
+  css += ".__vip-btn{background:linear-gradient(135deg,#5a3dc8,#7f5af0);color:#fff;border:none;border-radius:50px;padding:14px 28px;font:800 16px/1 system-ui;cursor:pointer;width:100%;margin-top:8px}";
+  css += ".__vip-btn:disabled{opacity:.6;cursor:wait}";
+  css += ".__vip-close{position:absolute;top:10px;right:14px;background:none;border:none;font-size:24px;cursor:pointer;color:#888}";
+  css += ".__vip-msg{margin-top:10px;font-size:13px;color:#999;min-height:18px}";
+  var style = document.createElement("style");
+  style.textContent = css;
+  document.head.appendChild(style);
+
+  // --- DOM ---
+  var fab = document.createElement("button");
+  fab.className = "__vip-fab" + (isVip ? " vip-on" : "");
+  fab.innerHTML = isVip ? "👑 VIP ACTIVO" : "👑 VIP";
+  fab.title = "VIP: sin anuncios + gemas x2 + extras";
+  document.body.appendChild(fab);
+
+  var modal = document.createElement("div");
+  modal.className = "__vip-modal";
+  modal.innerHTML =
+    '<div class="__vip-card">' +
+      '<button class="__vip-close" aria-label="Cerrar">✕</button>' +
+      '<h3>👑 VIP</h3>' +
+      '<div class="price">ARS $5.000 <span style="font-size:13px;color:#888">(pago único)</span></div>' +
+      '<ul>' +
+        '<li>🚫 Sin anuncios</li>' +
+        '<li>💎 Gemas x2 en cada partida</li>' +
+        '<li>🎨 Skin legendaria exclusiva</li>' +
+        '<li>⚡ Modo Contrarreloj</li>' +
+        '<li>🎁 Extras futuros gratis</li>' +
+      '</ul>' +
+      '<button class="__vip-btn">Pagar con MercadoPago</button>' +
+      '<div class="__vip-msg"></div>' +
+    '</div>';
+  document.body.appendChild(modal);
+
+  var btn = modal.querySelector(".__vip-btn");
+  var msg = modal.querySelector(".__vip-msg");
+  var closeBtn = modal.querySelector(".__vip-close");
+
+  function setVip() {
+    isVip = true;
+    try { localStorage.setItem(STORAGE_KEY, "1"); } catch (e) {}
+    fab.className = "__vip-fab vip-on";
+    fab.innerHTML = "👑 VIP ACTIVO";
+    modal.classList.remove("open");
+    // Intenta ocultar anuncios AdSense si existen
+    try {
+      document.querySelectorAll("ins.adsbygoogle").forEach(function (el) {
+        el.style.display = "none";
+      });
+    } catch (e) {}
+  }
+
+  fab.addEventListener("click", function () {
+    if (isVip) { modal.classList.remove("open"); return; }
+    modal.classList.add("open");
+  });
+  closeBtn.addEventListener("click", function () { modal.classList.remove("open"); });
+  modal.addEventListener("click", function (e) { if (e.target === modal) modal.classList.remove("open"); });
+
+  btn.addEventListener("click", async function () {
+    if (isVip) return;
+    btn.disabled = true;
+    btn.textContent = "Redirigiendo a MercadoPago...";
+    msg.textContent = "";
+    try {
+      var resp = await fetch(PAYMENT_URL + "/create-preference", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ producto: "vip" }),
+      });
+      var data = await resp.json();
+      if (!resp.ok || !data.init_point) throw new Error(data.error || "Error");
+      window.open(data.init_point, "_blank", "noopener");
+      msg.textContent = "Si ya pagaste, volvé a esta página y se activa solo ✓";
+    } catch (err) {
+      msg.textContent = "Pago no disponible ahora, intentá en un momento";
+    } finally {
+      btn.disabled = false;
+      btn.textContent = "Pagar con MercadoPago";
+    }
+  });
+
+  // Retorno de MercadoPago (back_url con ?pago=ok)
+  try {
+    var params = new URLSearchParams(window.location.search);
+    if (params.get("pago") === "ok") {
+      setVip();
+      history.replaceState(null, "", window.location.pathname);
+    }
+  } catch (e) {}
+})();
+</script>
 </body>
 </html>
